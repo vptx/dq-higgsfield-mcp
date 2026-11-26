@@ -103,6 +103,7 @@ app.get("/files/:id/:index", (req: Request, res: Response) => {
 });
 
 app.use("/admin", adminRouter);
+app.get("/", (_req, res) => res.redirect("/admin/"));
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, models: activeModels().length });
