@@ -15,8 +15,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json models.json ./
 COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh && mkdir -p /data && chown -R node:node /data /app
-USER node
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh && mkdir -p /data
 EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=5s CMD wget -qO- http://127.0.0.1:8787/health || exit 1
 ENTRYPOINT ["docker-entrypoint.sh"]
