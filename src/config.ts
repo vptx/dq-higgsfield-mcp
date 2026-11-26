@@ -71,6 +71,9 @@ export const config = {
   staleAfterHours: num("STALE_AFTER_HOURS", 6),
 
   logLevel: (process.env.LOG_LEVEL ?? "info") as "debug" | "info" | "warn" | "error",
+
+  /** Password for the /admin dashboard (min 16 chars). Empty = only admin member tokens can sign in. */
+  adminPassword: process.env.ADMIN_PASSWORD ?? "",
 };
 
 export function assertServerConfig(): void {
@@ -80,6 +83,9 @@ export function assertServerConfig(): void {
   }
   if (config.archiveDir && config.filesSecret.length < 32) {
     problems.push("FILES_SECRET must be at least 32 characters when ARCHIVE_DIR is set (or set ARCHIVE_DIR= to disable archiving)");
+  }
+  if (config.adminPassword && config.adminPassword.length < 16) {
+    problems.push("ADMIN_PASSWORD must be at least 16 characters (or leave it empty)");
   }
   if (problems.length) {
     throw new Error("Configuration error:\n - " + problems.join("\n - "));

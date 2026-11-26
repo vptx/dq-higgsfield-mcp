@@ -7,6 +7,7 @@ import { startPoller } from "./jobs.js";
 import { archivedAbsPath, verifyFileSig, type ArchivedFile } from "./archive.js";
 import { log } from "./log.js";
 import { activeModels } from "./models.js";
+import { adminRouter } from "./admin-web.js";
 
 assertServerConfig();
 activeModels(); // fail fast on a broken models.json
@@ -100,6 +101,8 @@ app.get("/files/:id/:index", (req: Request, res: Response) => {
   res.setHeader("Cache-Control", "private, max-age=3600");
   res.sendFile(abs);
 });
+
+app.use("/admin", adminRouter);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, models: activeModels().length });
