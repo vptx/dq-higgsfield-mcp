@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { config } from "./config.js";
+import { configuredServiceIds, type ServiceId } from "./services.js";
 
 export type Role = "member" | "admin";
 
@@ -20,12 +21,15 @@ export interface UserRow {
   max_concurrent: number;
   disabled: number;
   created_at: string;
+  /** JSON array of granted service ids. */
+  services: string;
 }
 
 export interface RequestRow {
   id: string;
   hf_request_id: string | null;
   user_id: string;
+  service: string;
   model_id: string;
   model_path: string;
   input_json: string;
@@ -81,6 +85,11 @@ CREATE TABLE IF NOT EXISTS audit (
 );
 `);
 
+// Additive migrations for databases created before multi-service support. Existing members keep Higgsfield.
+const columns = (table: string) => new Set((db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name));
+if (!columns("users").has("services")) db.exec(`ALTER TABLE users ADD COLUMN services TEXT NOT NULL DEFAULT '["higgsfield"]'`);
+if (!columns("requests").has("service")) db.exec(`ALTER TABLE requests ADD COLUMN service TEXT NOT NULL DEFAULT 'higgsfield'`);
+
 export const now = () => new Date().toISOString();
 export const monthStart = (d = new Date()) =>
   new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString();
@@ -106,6 +115,7 @@ export function createUser(opts: {
   role?: Role;
   monthlyBudgetUsd?: number;
   maxConcurrent?: number;
+  services?: ServiceId[];
 }): { user: UserRow; token: string } {
   const token = newToken();
   const user: UserRow = {
@@ -117,12 +127,13 @@ export function createUser(opts: {
     max_concurrent: opts.maxConcurrent ?? config.defaultUserConcurrency,
     disabled: 0,
     created_at: now(),
+    services: JSON.stringify(opts.services ?? configuredServiceIds()),
   };
   db.prepare(
-    `INSERT INTO users (id, name, token_hash, role, monthly_budget_usd, max_concurrent, disabled, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(user.id, user.name, user.token_hash, user.role, user.monthly_budget_usd, user.max_concurrent, 0, user.created_at);
-  audit(null, "user.create", { name: user.name, role: user.role, budget: user.monthly_budget_usd });
+    `INSERT INTO users (id, name, token_hash, role, monthly_budget_usd, max_concurrent, disabled, created_at, services)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(user.id, user.name, user.token_hash, user.role, user.monthly_budget_usd, user.max_concurrent, 0, user.created_at, user.services);
+  audit(null, "user.create", { name: user.name, role: user.role, budget: user.monthly_budget_usd, services: user.services });
   return { user, token };
 }
 
@@ -146,7 +157,7 @@ export function rotateToken(userId: string): string {
   return token;
 }
 
-export function updateUser(userId: string, patch: Partial<Pick<UserRow, "monthly_budget_usd" | "max_concurrent" | "disabled" | "role">>): void {
+export function updateUser(userId: string, patch: Partial<Pick<UserRow, "monthly_budget_usd" | "max_concurrent" | "disabled" | "role" | "services">>): void {
   const keys = Object.keys(patch) as (keyof typeof patch)[];
   if (!keys.length) return;
   const sets = keys.map((k) => `${k} = ?`).join(", ");
@@ -178,6 +189,13 @@ export function orgMonthSpend(at = new Date()): number {
   return row.s;
 }
 
+export function serviceMonthSpend(at = new Date()): Record<string, number> {
+  const rows = db
+    .prepare(`SELECT service, COALESCE(SUM(estimated_usd),0) AS s FROM requests WHERE status IN (${billableList}) AND created_at >= ? AND created_at < ? GROUP BY service`)
+    .all(monthStart(at), monthEnd(at)) as { service: string; s: number }[];
+  return Object.fromEntries(rows.map((r) => [r.service, r.s]));
+}
+
 export function openCount(userId?: string): number {
   const row = userId
     ? (db.prepare(`SELECT COUNT(*) AS c FROM requests WHERE status IN (${openList}) AND user_id = ?`).get(userId) as { c: number })
@@ -194,7 +212,10 @@ export type ReserveResult =
  * node:sqlite is synchronous, and this runs inside one BEGIN IMMEDIATE transaction, so two parallel
  * calls cannot both pass the check.
  */
-export function reserve(user: UserRow, args: { modelId: string; modelPath: string; input: unknown; project?: string; estimatedUsd: number }): ReserveResult {
+export function reserve(
+  user: UserRow,
+  args: { service: ServiceId; modelId: string; modelPath: string; input: unknown; project?: string; estimatedUsd: number },
+): ReserveResult {
   db.exec("BEGIN IMMEDIATE");
   try {
     if (openCount(user.id) >= user.max_concurrent) {
@@ -224,6 +245,7 @@ export function reserve(user: UserRow, args: { modelId: string; modelPath: strin
       id: randomUUID(),
       hf_request_id: null,
       user_id: user.id,
+      service: args.service,
       model_id: args.modelId,
       model_path: args.modelPath,
       input_json: JSON.stringify(args.input),
@@ -237,9 +259,9 @@ export function reserve(user: UserRow, args: { modelId: string; modelPath: strin
       updated_at: t,
     };
     db.prepare(
-      `INSERT INTO requests (id, hf_request_id, user_id, model_id, model_path, input_json, project, estimated_usd, status, created_at, updated_at)
-       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 'submitting', ?, ?)`,
-    ).run(row.id, row.user_id, row.model_id, row.model_path, row.input_json, row.project, row.estimated_usd, t, t);
+      `INSERT INTO requests (id, hf_request_id, user_id, service, model_id, model_path, input_json, project, estimated_usd, status, created_at, updated_at)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, 'submitting', ?, ?)`,
+    ).run(row.id, row.user_id, row.service, row.model_id, row.model_path, row.input_json, row.project, row.estimated_usd, t, t);
     db.exec("COMMIT");
     return { ok: true, request: row };
   } catch (e) {

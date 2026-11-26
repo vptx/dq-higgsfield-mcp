@@ -8,6 +8,7 @@ import { archivedAbsPath, verifyFileSig, type ArchivedFile } from "./archive.js"
 import { log } from "./log.js";
 import { activeModels } from "./models.js";
 import { adminRouter } from "./admin-web.js";
+import { configuredServiceIds } from "./services.js";
 
 assertServerConfig();
 activeModels(); // fail fast on a broken models.json
@@ -49,7 +50,7 @@ function authenticate(req: Request): UserRow | undefined {
 async function handleMcp(req: Request, res: Response) {
   const user = authenticate(req);
   if (!user) {
-    res.status(401).json({ jsonrpc: "2.0", error: { code: -32001, message: "Unauthorized: invalid or disabled Big Cloud token" }, id: null });
+    res.status(401).json({ jsonrpc: "2.0", error: { code: -32001, message: "Unauthorized: invalid or disabled Big Cloud AI token" }, id: null });
     return;
   }
   if (!rateLimit(user.id)) {
@@ -106,7 +107,7 @@ app.use("/admin", adminRouter);
 app.get("/", (_req, res) => res.redirect("/admin/"));
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, models: activeModels().length });
+  res.json({ ok: true, models: activeModels().length, services: configuredServiceIds() });
 });
 
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {

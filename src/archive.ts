@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { mkdirSync, createWriteStream, existsSync } from "node:fs";
-import { join, resolve, extname } from "node:path";
+import { mkdirSync, createWriteStream, existsSync, writeFileSync } from "node:fs";
+import { join, resolve, extname, sep } from "node:path";
 import { Readable, Transform, type TransformCallback } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { config } from "./config.js";
@@ -57,6 +57,16 @@ export async function archiveOutputs(requestId: string, userName: string, urls: 
   return out;
 }
 
+/** Stores bytes produced directly by an API (e.g. ElevenLabs audio) alongside downloaded outputs. */
+export function archiveBuffer(requestId: string, userName: string, index: number, data: Buffer, contentType: string): ArchivedFile {
+  const month = new Date().toISOString().slice(0, 7);
+  const relDir = join(userName.replace(/[^A-Za-z0-9._-]/g, "_"), month);
+  mkdirSync(resolve(config.archiveDir, relDir), { recursive: true });
+  const rel = join(relDir, `${requestId}_${index}${MIME_EXT[contentType] ?? ".bin"}`);
+  writeFileSync(resolve(config.archiveDir, rel), data);
+  return { index, file: rel, bytes: data.length, source_url: "" };
+}
+
 class TransformCounter extends Transform {
   constructor(private onBytes: (n: number) => void) {
     super();
@@ -88,6 +98,6 @@ export function verifyFileSig(requestId: string, index: number, exp: number, sig
 export function archivedAbsPath(rel: string): string | null {
   const root = resolve(config.archiveDir);
   const abs = resolve(root, rel);
-  if (!abs.startsWith(root + "/") && abs !== root) return null;
+  if (!abs.startsWith(root + sep)) return null;
   return existsSync(abs) ? abs : null;
 }

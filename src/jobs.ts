@@ -20,6 +20,7 @@ export class UserFacingError extends Error {}
 
 export interface JobView {
   id: string;
+  service: string;
   request_id: string | null;
   model: string;
   project: string | null;
@@ -36,6 +37,7 @@ export function toView(r: RequestRow): JobView {
   const archived: ArchivedFile[] = r.archived_json ? JSON.parse(r.archived_json) : [];
   return {
     id: r.id,
+    service: r.service,
     request_id: r.hf_request_id,
     model: r.model_id,
     project: r.project,
@@ -93,6 +95,7 @@ export async function generate(
   const { model, input } = args;
   const est = await estimateCost(model, input);
   const reservation = reserve(user, {
+    service: "higgsfield",
     modelId: model.id,
     modelPath: model.path,
     input,

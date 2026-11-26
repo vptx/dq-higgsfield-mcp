@@ -1,7 +1,8 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { config } from "./config.js";
-import { audit, createUser, listUsers, orgMonthSpend, rotateToken, updateUser, usageReport, userByName, userByToken } from "./db.js";
+import { audit, createUser, listUsers, orgMonthSpend, rotateToken, serviceMonthSpend, updateUser, usageReport, userByName, userByToken } from "./db.js";
+import { isServiceId, parseServices, SERVICES, type ServiceId } from "./services.js";
 import { PAGE, SCRIPT, STYLE } from "./admin-ui.js";
 
 const connectorUrl = (token: string) => `${config.publicBaseUrl}/mcp/u/${token}`;
@@ -109,18 +110,31 @@ adminRouter.get("/api/overview", (_req, res) => {
       completed: s?.completed ?? 0,
       failed: s?.failed ?? 0,
       created_at: u.created_at,
+      services: parseServices(u.services),
     };
   });
+  const bySvc = serviceMonthSpend();
   res.json({
     month: new Date().toISOString().slice(0, 7),
     org: { spent: orgMonthSpend(), budget: config.orgMonthlyBudgetUsd },
+    services: SERVICES.map((s) => ({ id: s.id, label: s.label, description: s.description, configured: s.configured(), spent: bySvc[s.id] ?? 0 })),
     users,
   });
 });
 
+function readServices(v: unknown): ServiceId[] | null {
+  if (!Array.isArray(v) || v.length > SERVICES.length || !v.every(isServiceId)) return null;
+  return [...new Set(v)];
+}
+
 adminRouter.post("/api/users", (req, res) => {
-  const { name, budget, concurrency, admin } = (req.body ?? {}) as Record<string, unknown>;
+  const { name, budget, concurrency, admin, services } = (req.body ?? {}) as Record<string, unknown>;
   const clean = typeof name === "string" ? name.trim() : "";
+  const svc = services === undefined ? undefined : readServices(services);
+  if (svc === null) {
+    res.status(400).json({ error: "قائمة الخدمات غير صالحة" });
+    return;
+  }
   if (!NAME_RE.test(clean)) {
     res.status(400).json({ error: "الاسم لازم يكون من 1 إلى 40 حرف أو رقم" });
     return;
@@ -142,8 +156,9 @@ adminRouter.post("/api/users", (req, res) => {
     role: admin === true ? "admin" : "member",
     monthlyBudgetUsd: budget as number | undefined,
     maxConcurrent: concurrency as number | undefined,
+    services: svc,
   });
-  audit(actorId(res), "admin_web.user_create", { name: user.name });
+  audit(actorId(res), "admin_web.user_create", { name: user.name, services: user.services });
   res.status(201).json({ name: user.name, connectorUrl: connectorUrl(token), token });
 });
 
@@ -153,8 +168,13 @@ adminRouter.patch("/api/users/:id", (req, res) => {
     res.status(404).json({ error: "العضو غير موجود" });
     return;
   }
-  const { budget, concurrency, role, disabled } = (req.body ?? {}) as Record<string, unknown>;
+  const { budget, concurrency, role, disabled, services } = (req.body ?? {}) as Record<string, unknown>;
   const patch: Parameters<typeof updateUser>[1] = {};
+  if (services !== undefined) {
+    const svc = readServices(services);
+    if (!svc) return void res.status(400).json({ error: "قائمة الخدمات غير صالحة" });
+    patch.services = JSON.stringify(svc);
+  }
   if (budget !== undefined) {
     if (!isBudget(budget)) return void res.status(400).json({ error: "الميزانية غير صالحة" });
     patch.monthly_budget_usd = budget;

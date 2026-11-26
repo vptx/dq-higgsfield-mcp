@@ -9,14 +9,20 @@ import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { startMock, MOCK_CREDS } from "./mock-higgsfield.js";
+import { startElevenLabsMock, MOCK_EL_KEY, MOCK_VOICE } from "./mock-elevenlabs.js";
 
 const MOCK_PORT = 9911;
 const GW_PORT = 9912;
+const EL_PORT = 9913;
+const ADMIN_PASSWORD = "e2e-admin-password-123";
 const dir = mkdtempSync(join(tmpdir(), "dqhf-"));
 const env = {
   ...process.env,
   HF_CREDENTIALS: MOCK_CREDS,
   HF_BASE_URL: `http://127.0.0.1:${MOCK_PORT}`,
+  ELEVENLABS_API_KEY: MOCK_EL_KEY,
+  ELEVENLABS_BASE_URL: `http://127.0.0.1:${EL_PORT}`,
+  ADMIN_PASSWORD,
   PORT: String(GW_PORT),
   HOST: "127.0.0.1",
   PUBLIC_BASE_URL: `http://127.0.0.1:${GW_PORT}`,
@@ -41,9 +47,18 @@ function check(name: string, cond: unknown, extra?: unknown) {
   }
 }
 
-const tsx = join(process.cwd(), "node_modules/.bin/tsx");
+// Run tsx through node directly so the test also works on Windows (no .cmd shim / shell needed).
+const tsxCli = join(process.cwd(), "node_modules/tsx/dist/cli.mjs");
 function admin(...args: string[]): string {
-  return execFileSync(tsx, ["src/admin.ts", ...args], { env, encoding: "utf8" });
+  return execFileSync(process.execPath, [tsxCli, "src/admin.ts", ...args], { env, encoding: "utf8" });
+}
+async function adminApi(method: string, path: string, body?: unknown) {
+  const r = await fetch(`http://127.0.0.1:${GW_PORT}/admin/api${path}`, {
+    method,
+    headers: { authorization: `Bearer ${ADMIN_PASSWORD}`, "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  return { status: r.status, body: (await r.json()) as any };
 }
 function addUser(name: string, ...flags: string[]): string {
   const out = admin("user:add", name, ...flags);
@@ -81,13 +96,14 @@ async function waitHealthy() {
 
 let gw: ChildProcess | undefined;
 const mock = startMock(MOCK_PORT);
+const elMock = startElevenLabsMock(EL_PORT);
 
 try {
   const tAdmin = addUser("yazan", "--admin", "--budget", "100");
-  const tSara = addUser("sara", "--budget", "1", "--concurrency", "1");
-  const tOmar = addUser("omar", "--budget", "10");
+  const tSara = addUser("sara", "--budget", "1", "--concurrency", "1", "--services", "higgsfield");
+  const tOmar = addUser("omar", "--budget", "10", "--services", "higgsfield");
 
-  gw = spawn(tsx, ["src/server.ts"], { env, stdio: ["ignore", "inherit", "inherit"] });
+  gw = spawn(process.execPath, [tsxCli, "src/server.ts"], { env, stdio: ["ignore", "inherit", "inherit"] });
   await waitHealthy();
 
   console.log("\nAuth");
@@ -102,8 +118,8 @@ try {
   console.log("\nTools");
   const saraTools = (await sara.listTools()).tools.map((t) => t.name);
   const adminTools = (await admin_.listTools()).tools.map((t) => t.name);
-  check("member sees 7 tools, no admin tool", saraTools.length === 7 && !saraTools.includes("hf_admin_team_usage"), saraTools);
-  check("admin also sees hf_admin_team_usage", adminTools.includes("hf_admin_team_usage"));
+  check("Higgsfield-only member sees 7 tools, no admin or ElevenLabs tool", saraTools.length === 7 && !saraTools.includes("admin_team_usage") && !saraTools.some((t) => t.startsWith("el_")), saraTools);
+  check("admin (all services) also sees admin_team_usage + ElevenLabs tools", adminTools.includes("admin_team_usage") && adminTools.includes("el_text_to_speech"), adminTools);
 
   const models = await call(sara, "hf_list_models");
   check("hf_list_models returns 3 models", models.structuredContent?.models?.length === 3, models);
@@ -139,15 +155,15 @@ try {
   check("no estimate → reserved at model ceiling ($0.25)", soul.structuredContent?.job?.estimated_usd === 0.25 && soul.structuredContent?.cost_basis?.includes("ceiling"), soul);
 
   console.log("\nModeration / failures are free");
-  const before = (await call(omar, "hf_my_budget")).structuredContent.budget.used_usd;
+  const before = (await call(omar, "my_budget")).structuredContent.budget.used_usd;
   const ns = await call(omar, "hf_generate", { model: "flux-kontext-max-t2i", input: { prompt: "nsfw thing" } });
   check("nsfw status surfaced", ns.structuredContent?.job?.status === "nsfw", ns);
-  const after = (await call(omar, "hf_my_budget")).structuredContent.budget.used_usd;
+  const after = (await call(omar, "my_budget")).structuredContent.budget.used_usd;
   check("nsfw not charged to budget", before === after, { before, after });
 
   const badInput = await call(omar, "hf_generate", { model: "flux-kontext-max-t2i", input: { aspect_ratio: "1:1" } });
   check("422 from Higgsfield surfaced as readable error", badInput.isError && badInput.content[0].text.includes("rejected the input"), badInput);
-  const afterBad = (await call(omar, "hf_my_budget")).structuredContent.budget;
+  const afterBad = (await call(omar, "my_budget")).structuredContent.budget;
   check("rejected submission releases reservation", afterBad.reserved_usd === 0 && afterBad.used_usd === after, afterBad);
 
   console.log("\nIsolation");
@@ -155,11 +171,11 @@ try {
   check("member cannot read another member's generation", peek.isError, peek);
   const adminPeek = await call(admin_, "hf_get_status", { id: job1.id });
   check("admin can read any generation", adminPeek.structuredContent?.job?.id === job1.id);
-  const hist = await call(sara, "hf_my_history", { project: "test" });
+  const hist = await call(sara, "my_history", { project: "test" });
   check("history filtered by project", hist.structuredContent?.jobs?.length === 1, hist);
 
   console.log("\nConcurrency + cancel");
-  await call(admin_, "hf_my_budget");
+  await call(admin_, "my_budget");
   admin("user:budget", "sara", "5");
   const slow = await call(sara, "hf_generate", { model: "seedance-2-t2v", input: { prompt: "slow render" }, wait_seconds: 0 });
   check("wait_seconds=0 returns immediately with id", ["queued", "submitting"].includes(slow.structuredContent?.job?.status), slow);
@@ -172,7 +188,7 @@ try {
   console.log("\nAdmin");
   const custom = await call(sara, "hf_generate", { model: "x", custom_model_path: "kling/v3/text-to-video", input: { prompt: "a" } });
   check("member cannot use custom model path", custom.isError);
-  const usage = await call(admin_, "hf_admin_team_usage");
+  const usage = await call(admin_, "admin_team_usage");
   check("team usage report lists 3 members", usage.structuredContent?.members?.length === 3, usage);
   admin("user:disable", "omar");
   let disabledOk = false;
@@ -191,17 +207,77 @@ try {
   const omar2 = await connect(tOmar);
   const bg = await call(omar2, "hf_generate", { model: "flux-kontext-max-t2i", input: { prompt: "bg job" }, wait_seconds: 0 });
   await sleep(2500);
-  const bgHist = await call(omar2, "hf_my_history", { limit: 1 });
+  const bgHist = await call(omar2, "my_history", { limit: 1 });
   check("poller finalizes jobs nobody is waiting on", bgHist.structuredContent?.jobs?.[0]?.id === bg.structuredContent?.job?.id && bgHist.structuredContent?.jobs?.[0]?.status === "completed", bgHist);
 
-  for (const c of [admin_, sara, omar, omar2]) await c.close().catch(() => {});
+  console.log("\nElevenLabs");
+  const voices = await call(admin_, "el_list_voices", { search: "arabic" });
+  check("el_list_voices returns voices + priced models", voices.structuredContent?.voices?.[0]?.voice_id === MOCK_VOICE && voices.structuredContent?.models?.length === 4, voices);
+  const usedBefore = (await call(admin_, "my_budget")).structuredContent.budget.used_usd;
+  const tts = await call(admin_, "el_text_to_speech", { text: "م".repeat(1000), voice_id: MOCK_VOICE, language_code: "ar", project: "voice" });
+  const ttsJob = tts.structuredContent?.job;
+  check("TTS completes and is priced per character ($0.08 / 1k chars)", ttsJob?.status === "completed" && ttsJob?.service === "elevenlabs" && ttsJob?.estimated_usd === 0.08, tts);
+  check("TTS sent model, language and mp3 format upstream", elMock.stats.lastTts?.model_id === "eleven_multilingual_v2" && elMock.stats.lastTts?.language_code === "ar" && elMock.stats.lastTts?.format === "mp3_44100_128", elMock.stats.lastTts);
+  const audioRes = await fetch(ttsJob.archived_links[0]);
+  const audioBytes = (await audioRes.arrayBuffer()).byteLength;
+  check("TTS audio downloads from signed link (2048 bytes, audio/mpeg)", audioRes.status === 200 && audioBytes === 2048 && audioRes.headers.get("content-type")?.includes("audio/mpeg"), { status: audioRes.status, audioBytes });
+  check("TTS charged to the shared budget", (await call(admin_, "my_budget")).structuredContent.budget.used_usd === Number((usedBefore + 0.08).toFixed(4)));
+
+  const ttsBefore = elMock.stats.tts;
+  const badVoice = await call(admin_, "el_text_to_speech", { text: "hi", voice_id: "../../x" });
+  check("invalid voice_id refused before reaching ElevenLabs", badVoice.isError && elMock.stats.tts === ttsBefore, badVoice);
+  const badModel = await call(admin_, "el_text_to_speech", { text: "hi", voice_id: MOCK_VOICE, model: "made_up" });
+  check("unknown TTS model refused", badModel.isError && badModel.content[0].text.includes("Unknown model"), badModel);
+  const reservedBefore = (await call(admin_, "my_budget")).structuredContent.budget;
+  const el422 = await call(admin_, "el_text_to_speech", { text: "fail422 please", voice_id: MOCK_VOICE });
+  const reservedAfter = (await call(admin_, "my_budget")).structuredContent.budget;
+  check("ElevenLabs 422 surfaced readably and not charged", el422.isError && el422.content[0].text.includes("rejected the input") && reservedAfter.used_usd === reservedBefore.used_usd && reservedAfter.reserved_usd === 0, { el422, reservedAfter });
+
+  const sfx = await call(admin_, "el_sound_effect", { prompt: "rain on a tin roof", duration_seconds: 15 });
+  check("sound effect priced by duration ($0.12/min → 15s = $0.03)", sfx.structuredContent?.job?.status === "completed" && sfx.structuredContent?.job?.estimated_usd === 0.03, sfx);
+  const elHist = await call(admin_, "my_history", { project: "voice" });
+  check("my_history includes ElevenLabs jobs with service tag", elHist.structuredContent?.jobs?.[0]?.service === "elevenlabs", elHist);
+
+  console.log("\nService access");
+  admin("user:services", "yazan", "higgsfield");
+  const admin2 = await connect(tAdmin);
+  const admin2Tools = (await admin2.listTools()).tools.map((t) => t.name);
+  check("revoking a service removes its tools on the same link", !admin2Tools.some((t) => t.startsWith("el_")) && admin2Tools.includes("hf_generate"), admin2Tools);
+  admin("user:services", "yazan", "higgsfield,elevenlabs");
+
+  const ov = await adminApi("GET", "/overview");
+  const elSvc = ov.body.services?.find((s: any) => s.id === "elevenlabs");
+  check("admin overview lists services with per-service spend", elSvc?.configured === true && elSvc?.spent === 0.11, ov.body.services);
+  const created = await adminApi("POST", "/users", { name: "voice-only", budget: 5, services: ["elevenlabs"] });
+  check("admin API creates a member with chosen services", created.status === 201 && created.body.token?.startsWith("bc_"), created);
+  const vo = await connect(created.body.token);
+  const voTools = (await vo.listTools()).tools.map((t) => t.name);
+  check("ElevenLabs-only member gets only el_* + shared tools", voTools.includes("el_text_to_speech") && !voTools.some((t) => t.startsWith("hf_")), voTools);
+  const badSvc = await adminApi("POST", "/users", { name: "x1", services: ["openai"] });
+  check("unknown service rejected by admin API", badSvc.status === 400, badSvc);
+  const voId = ov.body.users ? (await adminApi("GET", "/overview")).body.users.find((u: any) => u.name === "voice-only").id : "";
+  const patched = await adminApi("PATCH", `/users/${voId}`, { services: [] });
+  const vo2 = await connect(created.body.token);
+  const vo2Tools = (await vo2.listTools()).tools.map((t) => t.name);
+  check("removing all services leaves only shared tools", patched.status === 200 && vo2Tools.every((t) => !t.startsWith("el_") && !t.startsWith("hf_")), vo2Tools);
+
+  for (const c of [admin_, sara, omar, omar2, admin2, vo, vo2]) await c.close().catch(() => {});
 } catch (e) {
   failed++;
   console.error("Test crashed:", e);
 } finally {
-  gw?.kill("SIGTERM");
+  if (gw && gw.exitCode === null) {
+    const exited = new Promise((r) => gw!.once("exit", r));
+    gw.kill("SIGTERM");
+    await Promise.race([exited, sleep(5000)]);
+  }
   mock.server.close();
-  rmSync(dir, { recursive: true, force: true });
+  elMock.server.close();
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  } catch {
+    console.log(`  (could not remove temp dir ${dir})`);
+  }
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 }

@@ -2,6 +2,7 @@
 import { config } from "./config.js";
 import { createUser, listUsers, rotateToken, updateUser, usageReport, userByName, userMonthSpend } from "./db.js";
 import { loadModels, saveModels, ModelSchema } from "./models.js";
+import { isServiceId, parseServices, SERVICE_IDS, type ServiceId } from "./services.js";
 
 const [, , cmd, ...rest] = process.argv;
 
@@ -37,17 +38,25 @@ function printToken(name: string, token: string) {
   console.log("\n  ⚠ Shown once. Send it to the user privately (not in a group chat). It is stored only as a hash.\n");
 }
 
+function servicesArg(raw: string): ServiceId[] {
+  const list = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  const bad = list.filter((s) => !isServiceId(s));
+  if (bad.length) die(`Unknown service(s): ${bad.join(", ")}. Known: ${SERVICE_IDS.join(", ")}`);
+  return [...new Set(list)] as ServiceId[];
+}
+
 const { pos, f } = flags(rest);
 
 switch (cmd) {
   case "user:add": {
-    const name = pos[0] ?? die("Usage: user:add <name> [--budget 50] [--concurrency 3] [--admin]");
+    const name = pos[0] ?? die("Usage: user:add <name> [--budget 50] [--concurrency 3] [--admin] [--services higgsfield,elevenlabs]");
     if (userByName(name)) die(`User "${name}" already exists`);
     const { token } = createUser({
       name,
       role: f.admin ? "admin" : "member",
       monthlyBudgetUsd: f.budget ? Number(f.budget) : undefined,
       maxConcurrent: f.concurrency ? Number(f.concurrency) : undefined,
+      services: typeof f.services === "string" ? servicesArg(f.services) : undefined,
     });
     printToken(name, token);
     break;
@@ -59,6 +68,7 @@ switch (cmd) {
         name: u.name,
         role: u.role,
         status: u.disabled ? "disabled" : "active",
+        services: parseServices(u.services).join(","),
         budget: money(u.monthly_budget_usd),
         used: money(s.committed),
         reserved: money(s.reserved),
@@ -82,6 +92,13 @@ switch (cmd) {
     if (!Number.isInteger(n) || n < 1) die("Usage: user:concurrency <name> <n>");
     updateUser(u.id, { max_concurrent: n });
     console.log(`✔ ${u.name}: max concurrent → ${n}`);
+    break;
+  }
+  case "user:services": {
+    const u = needUser(pos[0]);
+    const list = servicesArg(pos[1] ?? "");
+    updateUser(u.id, { services: JSON.stringify(list) });
+    console.log(`✔ ${u.name}: services → ${list.join(", ") || "(none)"}`);
     break;
   }
   case "user:role": {
@@ -156,9 +173,11 @@ switch (cmd) {
     break;
   }
   default:
-    console.log(`Big Cloud · Higgsfield MCP admin
+    console.log(`Big Cloud · AI gateway admin
 
-  user:add <name> [--budget 50] [--concurrency 3] [--admin]   create a member, prints their connector URL
+  user:add <name> [--budget 50] [--concurrency 3] [--admin] [--services higgsfield,elevenlabs]
+                                                              create a member, prints their connector URL
+  user:services <name> higgsfield,elevenlabs                  set which services the member can use
   user:list                                                   members, budgets, this month's spend
   user:budget <name> <usd>                                    set monthly budget
   user:concurrency <name> <n>                                 max parallel generations for that member

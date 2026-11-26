@@ -1,7 +1,7 @@
 {
   "name": "bc-higgsfield-mcp",
   "version": "1.0.0",
-  "description": "Big Cloud internal MCP gateway for the Higgsfield API — per-user access, budgets, audit log, archived outputs.",
+  "description": "Big Cloud internal MCP gateway for AI services (Higgsfield, ElevenLabs) — per-user service access, budgets, audit log, archived outputs.",
   "type": "module",
   "private": true,
   "engines": {

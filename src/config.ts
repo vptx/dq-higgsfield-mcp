@@ -41,6 +41,12 @@ export const config = {
   /** Optional upstream retention, sent as Hf-Expires-After (e.g. "24h"). Empty = Higgsfield default (7 days). */
   hfExpiresAfter: process.env.HF_EXPIRES_AFTER ?? "",
 
+  /** ElevenLabs API key (elevenlabs.io → API keys). Empty = ElevenLabs service off. */
+  elevenlabsApiKey: process.env.ELEVENLABS_API_KEY ?? "",
+  elevenlabsBaseUrl: (process.env.ELEVENLABS_BASE_URL ?? "https://api.elevenlabs.io").replace(/\/+$/, ""),
+  /** Per-request text cap for text-to-speech (ElevenLabs allows 5k–40k depending on model). */
+  elevenlabsMaxChars: num("ELEVENLABS_MAX_CHARS", 5000),
+
   port: num("PORT", 8787),
   host: process.env.HOST ?? "0.0.0.0",
   /** Public HTTPS origin, used to print connector URLs and archived-file links. */
@@ -78,8 +84,11 @@ export const config = {
 
 export function assertServerConfig(): void {
   const problems: string[] = [];
-  if (!/^[^:\s]+:[^:\s]+$/.test(config.hfCredentials)) {
+  if (config.hfCredentials && !/^[^:\s]+:[^:\s]+$/.test(config.hfCredentials)) {
     problems.push('HF_CREDENTIALS must be "KEY_ID:KEY_SECRET" (from console.higgsfield.ai)');
+  }
+  if (!config.hfCredentials && !config.elevenlabsApiKey) {
+    problems.push("Configure at least one service: HF_CREDENTIALS and/or ELEVENLABS_API_KEY");
   }
   if (config.archiveDir && config.filesSecret.length < 32) {
     problems.push("FILES_SECRET must be at least 32 characters when ARCHIVE_DIR is set (or set ARCHIVE_DIR= to disable archiving)");

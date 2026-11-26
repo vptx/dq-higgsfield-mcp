@@ -16,7 +16,7 @@ export const PAGE = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <meta name="color-scheme" content="dark">
-<title>Big Cloud · Higgsfield</title>
+<title>Big Cloud · AI gateway</title>
 <link rel="icon" href="data:image/svg+xml,${encodeURIComponent(logo(64, "lg-fav"))}">
 <link rel="stylesheet" href="/admin/app.css">
 </head>
@@ -28,7 +28,7 @@ export const PAGE = `<!doctype html>
     <div class="login-brand">
       ${logo(96, "lg-login")}
       <h1>Big Cloud</h1>
-      <p class="muted">لوحة إدارة <bdi>Higgsfield gateway</bdi></p>
+      <p class="muted">لوحة إدارة <bdi>AI gateway</bdi></p>
     </div>
     <div class="field">
       <label for="secret">كلمة سر الأدمن أو توكن الأدمن</label>
@@ -50,7 +50,7 @@ export const PAGE = `<!doctype html>
         <span class="brand-mark">${logo(40, "lg-top")}</span>
         <div>
           <strong>Big Cloud</strong>
-          <span class="muted small">Higgsfield gateway</span>
+          <span class="muted small">AI gateway</span>
         </div>
       </div>
       <div class="topbar-end">
@@ -64,7 +64,7 @@ export const PAGE = `<!doctype html>
     <div class="page-head">
       <div>
         <h1>الفريق</h1>
-        <p class="muted">صرف وأعضاء شهر <span id="month" dir="ltr"></span> · الأرقام مبنية على تقدير Higgsfield</p>
+        <p class="muted">صرف وأعضاء شهر <span id="month" dir="ltr"></span> · الأرقام تقديرية حسب أسعار كل خدمة</p>
       </div>
       <button class="btn btn-primary" id="open-add" type="button"><span data-icon="plus"></span><span>إضافة عضو</span></button>
     </div>
@@ -117,6 +117,10 @@ export const PAGE = `<!doctype html>
         <input id="add-conc" type="number" min="1" max="20" step="1" value="3" inputmode="numeric">
       </div>
     </div>
+    <fieldset class="svc-field">
+      <legend>الخدمات المسموحة</legend>
+      <div id="add-services" class="svc-list"></div>
+    </fieldset>
     <label class="switch-row">
       <input id="add-admin" type="checkbox" class="switch">
       <span><strong>أدمن</strong><span class="muted small">بيقدر يدخل هاللوحة ويشوف توليدات الكل</span></span>
@@ -145,6 +149,11 @@ export const PAGE = `<!doctype html>
         <input id="edit-conc" type="number" min="1" max="20" step="1" inputmode="numeric">
       </div>
     </div>
+    <fieldset class="svc-field">
+      <legend>الخدمات المسموحة</legend>
+      <div id="edit-services" class="svc-list"></div>
+      <p class="hint">التغيير بيصير فوراً على نفس الرابط، ما بيحتاج العضو يغيّر شي.</p>
+    </fieldset>
     <label class="switch-row" id="edit-admin-row">
       <input id="edit-admin" type="checkbox" class="switch">
       <span><strong>أدمن</strong><span class="muted small">بيقدر يدخل هاللوحة ويشوف توليدات الكل</span></span>
@@ -187,7 +196,7 @@ export const PAGE = `<!doctype html>
   </div>
   <ol class="steps">
     <li>بـ Claude افتح <b><bdi>Settings ← Connectors ← Add custom connector</bdi></b></li>
-    <li>الاسم: <b><bdi>Big Cloud Higgsfield</bdi></b></li>
+    <li>الاسم: <b><bdi>Big Cloud AI</bdi></b></li>
     <li>الرابط: الرابط اللي فوق، وبعدين فعّل الـ connector بالمحادثة</li>
   </ol>
   <div class="dialog-actions">
@@ -315,6 +324,23 @@ input[type=number]{direction:ltr;text-align:right;font-variant-numeric:tabular-n
 .stat-value{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .stat-sub{font-size:12px;color:var(--subtle)}
 .stat-of{font-size:15px;font-weight:600;color:var(--muted)}
+.svc-split{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:8px;font-size:12px}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.svc-chip{font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent-text);border:1px solid rgba(31,111,235,.3)}
+.svc-chip.warn{background:var(--warn-soft);color:var(--warn);border-color:rgba(245,158,11,.3)}
+.svc-field{border:0;padding:0;margin:0 0 12px}
+.svc-field legend{font-size:13px;font-weight:600;color:var(--muted);padding:0;margin-bottom:6px}
+.svc-field .hint{margin-top:6px}
+.svc-list{display:grid;gap:8px}
+.svc-option{display:flex;gap:12px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius-sm);cursor:pointer;transition:border-color .18s var(--ease),background-color .18s var(--ease)}
+.svc-option:hover{border-color:var(--line-strong)}
+.svc-option:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.svc-option.is-off{opacity:.55;cursor:not-allowed}
+.svc-text{display:grid;gap:1px}
+.svc-check{appearance:none;flex-shrink:0;width:20px;height:20px;min-height:0;padding:0;border-radius:6px;border:1.5px solid var(--line-strong);background:var(--surface);display:grid;place-items:center;cursor:inherit}
+.svc-check:checked{background:var(--accent);border-color:var(--accent)}
+.svc-check:checked::after{content:"";width:10px;height:6px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:translateY(-1px) rotate(-45deg)}
+.svc-check:focus-visible{box-shadow:0 0 0 3px var(--accent-soft)}
 
 /* panel + table */
 .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
@@ -427,6 +453,7 @@ export const SCRIPT = `(() => {
   var KEY = "bc_admin_secret";
   var me = null;
   var users = [];
+  var services = [];
   var $ = function (id) { return document.getElementById(id); };
 
   var P = {
@@ -469,10 +496,8 @@ export const SCRIPT = `(() => {
       else if (k.slice(0, 2) === "on") e.addEventListener(k.slice(2), v);
       else e.setAttribute(k, v === true ? "" : v);
     });
-    for (var i = 2; i < arguments.length; i++) {
-      var kid = arguments[i];
-      if (kid !== null && kid !== undefined && kid !== false) e.append(kid);
-    }
+    var kids = Array.prototype.slice.call(arguments, 2).flat();
+    kids.forEach(function (kid) { if (kid !== null && kid !== undefined && kid !== false) e.append(kid); });
     return e;
   }
 
@@ -553,6 +578,7 @@ export const SCRIPT = `(() => {
   function refresh() {
     return api("GET", "/overview").then(function (d) {
       users = d.users;
+      services = d.services;
       $("month").textContent = d.month;
       renderStats(d);
       renderUsers();
@@ -581,6 +607,12 @@ export const SCRIPT = `(() => {
       spendSub = el("span", {}, "من سقف ", money(d.org.budget), el("div", { class: "meter " + meterTone(pct) }, bar));
     } else {
       spendSub = el("span", {}, "بدون سقف للفريق");
+    }
+    var split = d.services.filter(function (s) { return s.configured || s.spent > 0; });
+    if (split.length > 1) {
+      spendSub = el("div", {}, spendSub, el("div", { class: "svc-split" }, split.map(function (s) {
+        return el("span", {}, el("span", { class: "muted", text: s.label + " " }), money(s.spent));
+      })));
     }
 
     $("stats").replaceChildren(
@@ -657,7 +689,10 @@ export const SCRIPT = `(() => {
         el("span", { class: "avatar", "aria-hidden": "true", text: initials(u.name) }),
         el("div", {},
           el("div", { class: "member-name" }, el("span", { text: u.name }), u.role === "admin" ? el("span", { class: "badge", text: "أدمن" }) : null, isSelf ? el("span", { class: "muted small", text: "(انت)" }) : null),
-          el("div", { class: "member-meta", text: "انضاف " + day.format(new Date(u.created_at)) })))),
+          el("div", { class: "member-meta", text: "انضاف " + day.format(new Date(u.created_at)) }),
+          el("div", { class: "chips" }, u.services.length
+            ? u.services.map(function (id) { return el("span", { class: "svc-chip", text: serviceLabel(id) }); })
+            : el("span", { class: "svc-chip warn", text: "بدون خدمات" }))))),
       el("td", { class: "c-status" }, el("span", { class: "status " + (u.disabled ? "off" : "on"), text: u.disabled ? "موقوف" : "نشط" })),
       el("td", { class: "c-usage" }, el("div", { class: "usage" },
         el("div", { class: "usage-line" }, el("b", {}, money(spent)), el("span", { class: "muted" }, "من ", money(u.budget))),
@@ -710,7 +745,7 @@ export const SCRIPT = `(() => {
     $("link-sub").textContent = "العضو: " + data.name;
     $("link-url").value = data.connectorUrl;
     var base = data.connectorUrl.split("/mcp/u/")[0];
-    $("link-cmd").value = 'claude mcp add --transport http bc-higgsfield ' + base + '/mcp --header "Authorization: Bearer ' + data.token + '"';
+    $("link-cmd").value = 'claude mcp add --transport http bc-ai ' + base + '/mcp --header "Authorization: Bearer ' + data.token + '"';
     document.querySelectorAll("#link-dialog [data-secret]").forEach(resetSecret);
     $("link-dialog").showModal();
     $("link-dialog").querySelector("[data-copy]").focus();
@@ -761,8 +796,28 @@ export const SCRIPT = `(() => {
   });
 
   /* add */
+  function renderServicePicker(box, selected) {
+    var nodes = services.map(function (s) {
+      var id = box.id + "-" + s.id;
+      var cb = el("input", { type: "checkbox", id: id, value: s.id, class: "svc-check" });
+      cb.checked = s.configured && selected.indexOf(s.id) !== -1;
+      cb.disabled = !s.configured;
+      return el("label", { class: "svc-option" + (s.configured ? "" : " is-off"), for: id }, cb,
+        el("span", { class: "svc-text" }, el("strong", { text: s.label }), el("span", { class: "muted small", text: s.configured ? s.description : "مش مضبوطة على السيرفر لسا" })));
+    });
+    box.replaceChildren.apply(box, nodes);
+  }
+  function pickedServices(box) {
+    return Array.prototype.map.call(box.querySelectorAll("input:checked"), function (x) { return x.value; });
+  }
+  function serviceLabel(id) {
+    var s = services.find(function (x) { return x.id === id; });
+    return s ? s.label : id;
+  }
+
   $("open-add").addEventListener("click", function () {
     $("add-form").reset();
+    renderServicePicker($("add-services"), services.filter(function (s) { return s.configured; }).map(function (s) { return s.id; }));
     $("add-error").textContent = "";
     $("add-name").setAttribute("aria-invalid", "false");
     $("add-dialog").showModal();
@@ -774,13 +829,16 @@ export const SCRIPT = `(() => {
     var err = $("add-error");
     err.textContent = "";
     if (!name) { err.textContent = "اكتب اسم العضو"; $("add-name").setAttribute("aria-invalid", "true"); $("add-name").focus(); return; }
+    var picked = pickedServices($("add-services"));
+    if (!picked.length) { err.textContent = "اختار خدمة وحدة عالأقل"; return; }
     var btn = e.submitter || this.querySelector("[type=submit]");
     setLoading(btn, true);
     api("POST", "/users", {
       name: name,
       budget: Number($("add-budget").value),
       concurrency: Number($("add-conc").value),
-      admin: $("add-admin").checked
+      admin: $("add-admin").checked,
+      services: picked
     }).then(function (data) {
       $("add-dialog").close();
       showLink("العضو انضاف", data);
@@ -797,6 +855,7 @@ export const SCRIPT = `(() => {
     $("edit-conc").value = String(u.concurrency);
     $("edit-admin").checked = u.role === "admin";
     $("edit-admin-row").hidden = Boolean(me && me.via === "user" && me.name === u.name);
+    renderServicePicker($("edit-services"), u.services);
     $("edit-error").textContent = "";
     $("edit-dialog").showModal();
     $("edit-budget").focus();
@@ -806,6 +865,9 @@ export const SCRIPT = `(() => {
     if (!editing) return;
     var patch = { budget: Number($("edit-budget").value), concurrency: Number($("edit-conc").value) };
     if (!$("edit-admin-row").hidden) patch.role = $("edit-admin").checked ? "admin" : "member";
+    // keep grants for services that aren't configured on the server yet (their boxes are disabled)
+    var dormant = editing.services.filter(function (id) { return !services.some(function (s) { return s.id === id && s.configured; }); });
+    patch.services = pickedServices($("edit-services")).concat(dormant);
     var btn = e.submitter || this.querySelector("[type=submit]");
     setLoading(btn, true);
     var name = editing.name;

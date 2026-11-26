@@ -1,13 +1,26 @@
-# Big Cloud · Higgsfield MCP Gateway
+# Big Cloud · AI Gateway (MCP)
 
-سيرفر MCP داخلي بيربط كلود عند كل عضو بالفريق مع **Higgsfield API**. مفتاح الـ API بضل على السيرفر وما حدا بالفريق بشوفه، ولكل عضو رابط خاص فيه وميزانية شهرية وسجل لكل توليد.
+سيرفر MCP داخلي بيربط كلود عند كل عضو بالفريق مع خدمات الذكاء الاصطناعي: **Higgsfield** (صور وفيديو) و**ElevenLabs** (صوت). مفاتيح الـ API بتضل على السيرفر وما حدا بالفريق بشوفها. كل عضو عنده **رابط واحد** وميزانية شهرية وحدة، والأدمن بيختار شو الخدمات المسموحة لكل عضو.
 
 ```
-Claude (عضو 1) ─┐
-Claude (عضو 2) ─┼──►  hf.big-system.app  (هذا السيرفر)  ──►  api.higgsfield.ai
-Claude (عضو 3) ─┘      • توكن لكل شخص      • ميزانية + حدود
-                       • سجل وتقارير        • أرشفة المخرجات
+Claude (عضو 1) ─┐                                     ┌──►  api.higgsfield.ai
+Claude (عضو 2) ─┼──►  AI gateway (هذا السيرفر)  ──────┤
+Claude (عضو 3) ─┘   • رابط واحد لكل شخص               └──►  api.elevenlabs.io
+                    • خدمات حسب الصلاحية • ميزانية + سقف للفريق • أرشفة المخرجات
 ```
+
+## الخدمات
+
+| الخدمة | المتغيّر | التسعير بالميزانية |
+|---|---|---|
+| Higgsfield | `HF_CREDENTIALS` | السعر اللي بيرجّعه Higgsfield (`/estimate`)، أو `max_usd` للموديل كأسوأ حالة |
+| ElevenLabs | `ELEVENLABS_API_KEY` | تحويل النص لصوت بالحرف: 0.08$ لكل 1000 حرف (Multilingual v2 وv3)، و0.04$ (Flash وTurbo). المؤثرات الصوتية 0.12$ للدقيقة |
+
+- الخدمة بتشتغل بس إذا متغيّرها موجود على السيرفر. الخدمة اللي ما إلها مفتاح بتطلع بالداشبورد معطّلة.
+- لما توقف خدمة عن عضو بتختفي أدواتها عنده فوراً، بدون ما يتغيّر رابطه.
+- الميزانية الشهرية وحدة لكل عضو وبتنحسب على كل الخدمات مع بعض، و`ORG_MONTHLY_BUDGET_USD` هو سقف الفريق كله.
+- أسعار ElevenLabs موجودة بـ [src/elevenlabs.ts](src/elevenlabs.ts) ومأخوذة من elevenlabs.io/pricing/api. إذا تغيّرت الأسعار أو خطة الاشتراك، عدّلها هونيك.
+- لإضافة خدمة جديدة: اكتب client بـ `src/<service>.ts`، وأدواتها بـ `src/tools/<service>.ts`، وبعدين سجّلها بـ [src/services.ts](src/services.ts) و[src/tools.ts](src/tools.ts).
 
 ## شو بيعمل
 
@@ -22,10 +35,12 @@ Claude (عضو 3) ─┘      • توكن لكل شخص      • ميزانية
 | موديلات معتمدة | الفريق بستخدم بس الموديلات اللي بـ `models.json`. الأدمن بقدر يجرّب أي path. |
 | أرشفة | Higgsfield بحذف الملفات بعد 7 أيام تقريباً، فالسيرفر بنزّلها عنده وبعطي روابط موقّعة صالحة 30 يوم. |
 | عزل | كل عضو بشوف بس توليداته، والأدمن بشوف الكل. |
-| تقارير | `usage` بعطيك صرف كل شخص بالشهر، وفي أداة `hf_admin_team_usage` جوا كلود. |
+| تقارير | `usage` بعطيك صرف كل شخص بالشهر، وفي أداة `admin_team_usage` جوا كلود. |
 
 ### الأدوات اللي بتظهر بكلود
-`hf_list_models` · `hf_estimate_cost` · `hf_generate` · `hf_get_status` · `hf_cancel` · `hf_my_history` · `hf_my_budget`، وللأدمن كمان `hf_admin_team_usage`.
+- **للكل:** `my_budget` · `my_history`، وللأدمن كمان `admin_team_usage`.
+- **Higgsfield:** `hf_list_models` · `hf_estimate_cost` · `hf_generate` · `hf_get_status` · `hf_cancel`.
+- **ElevenLabs:** `el_list_voices` · `el_text_to_speech` · `el_sound_effect`. الصوت بيرجع كرابط تحميل موقّع، فلازم يكون `ARCHIVE_DIR` و`FILES_SECRET` مضبوطين.
 
 ---
 
@@ -65,7 +80,7 @@ bc user:add omar  --budget 25
 
 ### 4. كل عضو بربط كلود تبعه
 1. **Claude → Settings → Connectors → Add custom connector**
-2. Name: `Big Cloud Higgsfield`
+2. Name: `Big Cloud AI`
 3. URL: الرابط اللي وصله
 4. Add، وبعدين بفعّل الـ connector بالمحادثة وبكتب مثلاً: *«ولّدلي فيديو 5 ثواني 9:16 لـ…»*
 
@@ -73,7 +88,7 @@ bc user:add omar  --budget 25
 
 كمان بشتغل مع Claude Code وأي عميل MCP، عن طريق هيدر `Authorization: Bearer <token>` على `https://hf.big-system.app/mcp`:
 ```bash
-claude mcp add --transport http bc-higgsfield https://hf.big-system.app/mcp --header "Authorization: Bearer bc_xxx"
+claude mcp add --transport http bc-ai https://hf.big-system.app/mcp --header "Authorization: Bearer bc_xxx"
 ```
 
 ---
@@ -100,6 +115,7 @@ bc user:concurrency sara 3
 bc user:disable omar              # إيقاف فوري
 bc user:rotate sara               # رابط جديد، والقديم بوقف يشتغل
 bc user:role sara admin
+bc user:services sara higgsfield,elevenlabs   # الخدمات المسموحة
 ```
 
 ### إضافة موديلات
