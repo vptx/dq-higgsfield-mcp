@@ -1,0 +1,14 @@
+# Replace with your domain. Caddy issues the HTTPS certificate automatically.
+hf.big-system.app {
+	encode gzip
+	# Keep tokens (they are in the URL path) out of access logs.
+	log {
+		output discard
+	}
+	reverse_proxy hf-mcp:8787 {
+		flush_interval -1
+		transport http {
+			read_timeout 180s
+		}
+	}
+}

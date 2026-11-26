@@ -1,0 +1,29 @@
+services:
+  hf-mcp:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_PATH: /data/bc-higgsfield.sqlite
+      ARCHIVE_DIR: /data/outputs
+      MODELS_FILE: /data/models.json
+    volumes:
+      - hf-data:/data
+    expose:
+      - "8787"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - hf-mcp
+
+volumes:
+  hf-data:
+  caddy-data:

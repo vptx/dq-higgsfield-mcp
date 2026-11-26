@@ -1,0 +1,43 @@
+{
+  "_readme": "Allow-list of Higgsfield API models the team may use. 'path' is the endpoint after https://api.higgsfield.ai/ exactly as shown on the model's page in console.higgsfield.ai. 'max_usd' is a safety ceiling: a generation whose estimate is above it is refused, and it is also used as the reservation if the estimate endpoint is unavailable. Add more with: npm run admin -- models:add",
+  "models": [
+    {
+      "id": "seedance-2-t2v",
+      "path": "bytedance/seedance-2.0/text-to-video",
+      "kind": "video",
+      "label": "Seedance 2.0 — text to video",
+      "notes": "Inputs: prompt, resolution ('720p'), duration (seconds), aspect_ratio ('16:9' | '9:16' | '1:1'), generate_audio (bool).",
+      "example_input": {
+        "prompt": "A cinematic tracking shot along a sunlit coastal road",
+        "resolution": "720p",
+        "generate_audio": true,
+        "duration": 5,
+        "aspect_ratio": "16:9"
+      },
+      "max_usd": 2.0
+    },
+    {
+      "id": "flux-kontext-max-t2i",
+      "path": "flux-pro/kontext/max/text-to-image",
+      "kind": "image",
+      "label": "FLUX Kontext Max — text to image",
+      "notes": "Inputs: prompt, aspect_ratio ('1:1' | '9:16' | '16:9' ...), seed, safety_tolerance.",
+      "example_input": {
+        "prompt": "Editorial portrait in soft daylight",
+        "aspect_ratio": "9:16"
+      },
+      "max_usd": 0.5
+    },
+    {
+      "id": "soul-2-standard",
+      "path": "higgsfield-ai/soul/v2/standard",
+      "kind": "image",
+      "label": "Higgsfield Soul 2 — standard image",
+      "notes": "Higgsfield's own photoreal image model. Inputs: prompt (+ model-specific options from the console page).",
+      "example_input": {
+        "prompt": "Editorial portrait in soft daylight"
+      },
+      "max_usd": 0.25
+    }
+  ]
+}
