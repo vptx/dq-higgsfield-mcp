@@ -85,7 +85,8 @@ export function assertServerConfig(): void {
     problems.push("FILES_SECRET must be at least 32 characters when ARCHIVE_DIR is set (or set ARCHIVE_DIR= to disable archiving)");
   }
   if (config.adminPassword && config.adminPassword.length < 16) {
-    problems.push("ADMIN_PASSWORD must be at least 16 characters (or leave it empty)");
+    // Don't take the MCP gateway down over a dashboard setting; password sign-in just stays off.
+    console.warn("ADMIN_PASSWORD is shorter than 16 characters, so /admin password sign-in is disabled.");
   }
   if (problems.length) {
     throw new Error("Configuration error:\n - " + problems.join("\n - "));
