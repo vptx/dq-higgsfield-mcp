@@ -6,6 +6,7 @@ COPY src ./src
 RUN npm run build && npm prune --omit=dev
 
 FROM node:22-alpine
+# cache-bust: 2026-11-26
 ENV NODE_ENV=production \
     DB_PATH=/data/bc-higgsfield.sqlite \
     ARCHIVE_DIR=/data/outputs \
