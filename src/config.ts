@@ -42,15 +42,15 @@ export const config = {
   hfExpiresAfter: process.env.HF_EXPIRES_AFTER ?? "",
 
   /** ElevenLabs API key (elevenlabs.io → API keys). Empty = ElevenLabs service off. */
-  elevenlabsApiKey: process.env.ELEVENLABS_API_KEY ?? "",
-  elevenlabsBaseUrl: (process.env.ELEVENLABS_BASE_URL ?? "https://api.elevenlabs.io").replace(/\/+$/, ""),
+  elevenlabsApiKey: (process.env.ELEVENLABS_API_KEY ?? "").trim(),
+  elevenlabsBaseUrl: (process.env.ELEVENLABS_BASE_URL ?? "https://api.elevenlabs.io").trim().replace(/\/+$/, ""),
   /** Per-request text cap for text-to-speech (ElevenLabs allows 5k–40k depending on model). */
   elevenlabsMaxChars: num("ELEVENLABS_MAX_CHARS", 5000),
 
   port: num("PORT", 8787),
   host: process.env.HOST ?? "0.0.0.0",
   /** Public HTTPS origin, used to print connector URLs and archived-file links. */
-  publicBaseUrl: (process.env.PUBLIC_BASE_URL ?? "http://localhost:8787").replace(/\/+$/, ""),
+  publicBaseUrl: (process.env.PUBLIC_BASE_URL ?? "http://localhost:8787").trim().replace(/\/+$/, ""),
 
   dbPath: process.env.DB_PATH ?? "./data/bc-higgsfield.sqlite",
   modelsFile: process.env.MODELS_FILE ?? "./models.json",
@@ -79,7 +79,7 @@ export const config = {
   logLevel: (process.env.LOG_LEVEL ?? "info") as "debug" | "info" | "warn" | "error",
 
   /** Password for the /admin dashboard (min 16 chars). Empty = only admin member tokens can sign in. */
-  adminPassword: process.env.ADMIN_PASSWORD ?? "",
+  adminPassword: (process.env.ADMIN_PASSWORD ?? "").trim(),
 };
 
 export function assertServerConfig(): void {
