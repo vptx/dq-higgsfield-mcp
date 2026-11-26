@@ -6,7 +6,6 @@ COPY src ./src
 RUN npm run build && npm prune --omit=dev
 
 FROM node:22-alpine
-# cache-bust: 2026-11-26
 ENV NODE_ENV=production \
     DB_PATH=/data/bc-higgsfield.sqlite \
     ARCHIVE_DIR=/data/outputs \
@@ -16,7 +15,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json models.json ./
 COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh && mkdir -p /data
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh && mkdir -p /data && chmod 777 /data
 EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=5s CMD wget -qO- http://127.0.0.1:8787/health || exit 1
 ENTRYPOINT ["docker-entrypoint.sh"]
